@@ -14,6 +14,42 @@ Run `ng generate component component-name` to generate a new component. You can 
 
 Run `ng build` to build the project. The build artifacts will be stored in the `dist/` directory.
 
+## Deployment
+
+This app is deployed as a static site to S3 behind CloudFront.
+
+Prereqs:
+- AWS CLI installed and authenticated to the correct account.
+
+Build (production by default):
+
+```sh
+npm install
+npm run build
+```
+
+Upload the build output to S3 (origin bucket):
+
+```sh
+aws s3 sync dist/holiday-lookup/browser s3://whenischag.nosson.ai/
+```
+
+Clear the CloudFront cache:
+
+```sh
+aws cloudfront create-invalidation --distribution-id EHAKOMIX5V7GI --paths "/*"
+```
+
+Notes:
+- Current CloudFront alias: `whenischag.nosson.ai`
+- If you later add Angular Router routes, configure CloudFront to rewrite unknown paths to `index.html`.
+
+Optional: local smoke test of the built output:
+
+```sh
+npx serve -s dist/holiday-lookup/browser
+```
+
 ## Running unit tests
 
 Run `ng test` to execute the unit tests via [Karma](https://karma-runner.github.io).

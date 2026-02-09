@@ -1,4 +1,32 @@
 import { Injectable } from '@angular/core';
+import { HebrewCalendar, flags as HebcalFlags } from '@hebcal/core';
+
+const SEARCH_WS_RE = /\s+/g;
+const HEBREW_RE = /[\u0590-\u05FF]/;
+const HEBREW_SKELETON_DROP_RE = /[וי]/g;
+
+function normalizeForSearch(input: string): string {
+  return input
+    .toLowerCase()
+    .normalize('NFKD')
+    // Remove diacritics (including Hebrew niqqud/cantillation) for forgiving search.
+    .replace(/\p{M}+/gu, '')
+    // Remove apostrophes/quotes so e.g. "New Year's" -> "new years" and ט״ו -> טו.
+    .replace(/['"\u2018\u2019\u201C\u201D\u02BC\u2032\u0060\u00B4\u05F3\u05F4]/g, '')
+    .replace(/&/g, ' and ')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .trim()
+    .replace(SEARCH_WS_RE, ' ');
+}
+
+function compactForSearch(normalized: string): string {
+  return normalized.replace(SEARCH_WS_RE, '');
+}
+
+function hebrewSkeleton(normalized: string): string {
+  const c = compactForSearch(normalized);
+  return HEBREW_RE.test(c) ? c.replace(HEBREW_SKELETON_DROP_RE, '') : c;
+}
 
 // ════════════════════════════════════════════════════════════════════
 // TYPES
@@ -43,104 +71,56 @@ export interface CatStyle {
 }
 
 // ════════════════════════════════════════════════════════════════════
-// EMBEDDED HOLIDAY DATA — sourced from Hebcal (hebcal.com)
+// JEWISH HOLIDAY DEFINITIONS — dates computed locally via @hebcal/core
 // ════════════════════════════════════════════════════════════════════
-const JEWISH_HOLIDAYS_DIASPORA: RawHoliday[] = [
-  // ── 5786 (2025-2026) ──
-  { title: "Rosh Hashana", start: "2025-09-22", end: "2025-09-24", cat: "major", hebrew: "רֹאשׁ הַשָּׁנָה", desc: "The Jewish New Year" },
-  { title: "Tzom Gedaliah", start: "2025-09-25", end: "2025-09-25", cat: "fast", hebrew: "צוֹם גְּדַלְיָה", desc: "Fast commemorating the assassination of Gedaliah ben Ahikam" },
-  { title: "Yom Kippur", start: "2025-10-01", end: "2025-10-02", cat: "major", hebrew: "יוֹם כִּפּוּר", desc: "Day of Atonement" },
-  { title: "Sukkot", start: "2025-10-06", end: "2025-10-13", cat: "major", hebrew: "סוּכּוֹת", desc: "Feast of Booths" },
-  { title: "Shmini Atzeret", start: "2025-10-13", end: "2025-10-14", cat: "major", hebrew: "שְׁמִינִי עֲצֶרֶת", desc: "Eighth Day of Assembly" },
-  { title: "Simchat Torah", start: "2025-10-14", end: "2025-10-15", cat: "major", hebrew: "שִׂמְחַת תּוֹרָה", desc: "Rejoicing with the Torah" },
-  { title: "Chanukah", start: "2025-12-14", end: "2025-12-22", cat: "major", hebrew: "חֲנוּכָּה", desc: "Festival of Lights" },
-  { title: "Asara B'Tevet", start: "2025-12-30", end: "2025-12-30", cat: "fast", hebrew: "עֲשָׂרָה בְּטֵבֵת", desc: "Fast commemorating the siege of Jerusalem" },
-  { title: "Tu BiShvat", start: "2026-02-01", end: "2026-02-02", cat: "minor", hebrew: "ט\"וּ בִּשְׁבָט", desc: "New Year for Trees" },
-  { title: "Ta'anit Esther", start: "2026-03-02", end: "2026-03-02", cat: "fast", hebrew: "תַּעֲנִית אֶסְתֵּר", desc: "Fast of Esther" },
-  { title: "Purim", start: "2026-03-02", end: "2026-03-03", cat: "major", hebrew: "פּוּרִים", desc: "Celebration of Jewish deliverance as told by Megilat Esther" },
-  { title: "Shushan Purim", start: "2026-03-03", end: "2026-03-04", cat: "minor", hebrew: "שׁוּשַׁן פּוּרִים", desc: "Purim as celebrated in walled cities" },
-  { title: "Pesach", start: "2026-04-01", end: "2026-04-09", cat: "major", hebrew: "פֶּסַח", desc: "Passover — the Feast of Unleavened Bread" },
-  { title: "Yom HaShoah", start: "2026-04-13", end: "2026-04-14", cat: "modern", hebrew: "יוֹם הַשּׁוֹאָה", desc: "Holocaust Remembrance Day" },
-  { title: "Yom HaZikaron", start: "2026-04-20", end: "2026-04-21", cat: "modern", hebrew: "יוֹם הַזִּכָּרוֹן", desc: "Israeli Memorial Day" },
-  { title: "Yom HaAtzmaut", start: "2026-04-21", end: "2026-04-22", cat: "modern", hebrew: "יוֹם הָעַצְמָאוּת", desc: "Israel Independence Day" },
-  { title: "Pesach Sheni", start: "2026-04-30", end: "2026-05-01", cat: "minor", hebrew: "פֶּסַח שֵׁנִי", desc: "Second Passover" },
-  { title: "Lag BaOmer", start: "2026-05-04", end: "2026-05-05", cat: "minor", hebrew: "ל\"ג בָּעוֹמֶר", desc: "33rd day of counting the Omer" },
-  { title: "Yom Yerushalayim", start: "2026-05-14", end: "2026-05-15", cat: "modern", hebrew: "יוֹם יְרוּשָׁלַיִם", desc: "Jerusalem Day" },
-  { title: "Shavuot", start: "2026-05-21", end: "2026-05-23", cat: "major", hebrew: "שָׁבוּעוֹת", desc: "Festival of Weeks" },
-  { title: "Tzom Tammuz", start: "2026-07-02", end: "2026-07-02", cat: "fast", hebrew: "צוֹם תַּמּוּז", desc: "Fast of the 17th of Tammuz" },
-  { title: "Tisha B'Av", start: "2026-07-22", end: "2026-07-23", cat: "fast", hebrew: "תִּשְׁעָה בְּאָב", desc: "Fast commemorating the destruction of the Temples" },
-  { title: "Tu B'Av", start: "2026-07-28", end: "2026-07-29", cat: "minor", hebrew: "ט\"וּ בְּאָב", desc: "Minor holiday of love" },
+interface JewishHolidayDef {
+  title: string;
+  hebcalBasename: string;
+  cat: Exclude<HolidayCat, 'us-federal'>;
+  hebrew: string;
+  desc: string;
+  includeInIsrael?: boolean;
+  titleInIsrael?: string;
+  hebrewInIsrael?: string;
+}
 
-  // ── 5787 (2026-2027) ──
-  { title: "Rosh Hashana", start: "2026-09-11", end: "2026-09-13", cat: "major", hebrew: "רֹאשׁ הַשָּׁנָה", desc: "The Jewish New Year" },
-  { title: "Tzom Gedaliah", start: "2026-09-14", end: "2026-09-14", cat: "fast", hebrew: "צוֹם גְּדַלְיָה", desc: "Fast commemorating the assassination of Gedaliah ben Ahikam" },
-  { title: "Yom Kippur", start: "2026-09-20", end: "2026-09-21", cat: "major", hebrew: "יוֹם כִּפּוּר", desc: "Day of Atonement" },
-  { title: "Sukkot", start: "2026-09-25", end: "2026-10-02", cat: "major", hebrew: "סוּכּוֹת", desc: "Feast of Booths" },
-  { title: "Shmini Atzeret", start: "2026-10-02", end: "2026-10-03", cat: "major", hebrew: "שְׁמִינִי עֲצֶרֶת", desc: "Eighth Day of Assembly" },
-  { title: "Simchat Torah", start: "2026-10-03", end: "2026-10-04", cat: "major", hebrew: "שִׂמְחַת תּוֹרָה", desc: "Rejoicing with the Torah" },
-  { title: "Chanukah", start: "2026-12-04", end: "2026-12-12", cat: "major", hebrew: "חֲנוּכָּה", desc: "Festival of Lights" },
-  { title: "Asara B'Tevet", start: "2026-12-20", end: "2026-12-20", cat: "fast", hebrew: "עֲשָׂרָה בְּטֵבֵת", desc: "Fast commemorating the siege of Jerusalem" },
-  { title: "Tu BiShvat", start: "2027-01-22", end: "2027-01-23", cat: "minor", hebrew: "ט\"וּ בִּשְׁבָט", desc: "New Year for Trees" },
-  { title: "Ta'anit Esther", start: "2027-03-22", end: "2027-03-22", cat: "fast", hebrew: "תַּעֲנִית אֶסְתֵּר", desc: "Fast of Esther" },
-  { title: "Purim", start: "2027-03-22", end: "2027-03-23", cat: "major", hebrew: "פּוּרִים", desc: "Celebration of Jewish deliverance as told by Megilat Esther" },
-  { title: "Shushan Purim", start: "2027-03-23", end: "2027-03-24", cat: "minor", hebrew: "שׁוּשַׁן פּוּרִים", desc: "Purim as celebrated in walled cities" },
-  { title: "Pesach", start: "2027-04-21", end: "2027-04-29", cat: "major", hebrew: "פֶּסַח", desc: "Passover — the Feast of Unleavened Bread" },
-  { title: "Yom HaShoah", start: "2027-05-03", end: "2027-05-04", cat: "modern", hebrew: "יוֹם הַשּׁוֹאָה", desc: "Holocaust Remembrance Day" },
-  { title: "Yom HaZikaron", start: "2027-05-10", end: "2027-05-11", cat: "modern", hebrew: "יוֹם הַזִּכָּרוֹן", desc: "Israeli Memorial Day" },
-  { title: "Yom HaAtzmaut", start: "2027-05-11", end: "2027-05-12", cat: "modern", hebrew: "יוֹם הָעַצְמָאוּת", desc: "Israel Independence Day" },
-  { title: "Lag BaOmer", start: "2027-05-24", end: "2027-05-25", cat: "minor", hebrew: "ל\"ג בָּעוֹמֶר", desc: "33rd day of counting the Omer" },
-  { title: "Shavuot", start: "2027-06-10", end: "2027-06-12", cat: "major", hebrew: "שָׁבוּעוֹת", desc: "Festival of Weeks" },
-  { title: "Tzom Tammuz", start: "2027-07-22", end: "2027-07-22", cat: "fast", hebrew: "צוֹם תַּמּוּז", desc: "Fast of the 17th of Tammuz" },
-  { title: "Tisha B'Av", start: "2027-08-11", end: "2027-08-12", cat: "fast", hebrew: "תִּשְׁעָה בְּאָב", desc: "Fast commemorating the destruction of the Temples" },
-  { title: "Tu B'Av", start: "2027-08-17", end: "2027-08-18", cat: "minor", hebrew: "ט\"וּ בְּאָב", desc: "Minor holiday of love" },
-
-  // ── 5788 (2027-2028) ──
-  { title: "Rosh Hashana", start: "2027-10-01", end: "2027-10-03", cat: "major", hebrew: "רֹאשׁ הַשָּׁנָה", desc: "The Jewish New Year" },
-  { title: "Yom Kippur", start: "2027-10-10", end: "2027-10-11", cat: "major", hebrew: "יוֹם כִּפּוּר", desc: "Day of Atonement" },
-  { title: "Sukkot", start: "2027-10-15", end: "2027-10-22", cat: "major", hebrew: "סוּכּוֹת", desc: "Feast of Booths" },
-  { title: "Shmini Atzeret", start: "2027-10-22", end: "2027-10-23", cat: "major", hebrew: "שְׁמִינִי עֲצֶרֶת", desc: "Eighth Day of Assembly" },
-  { title: "Simchat Torah", start: "2027-10-23", end: "2027-10-24", cat: "major", hebrew: "שִׂמְחַת תּוֹרָה", desc: "Rejoicing with the Torah" },
-  { title: "Chanukah", start: "2027-12-24", end: "2028-01-01", cat: "major", hebrew: "חֲנוּכָּה", desc: "Festival of Lights" },
-  { title: "Tu BiShvat", start: "2028-02-11", end: "2028-02-12", cat: "minor", hebrew: "ט\"וּ בִּשְׁבָט", desc: "New Year for Trees" },
-  { title: "Purim", start: "2028-03-11", end: "2028-03-12", cat: "major", hebrew: "פּוּרִים", desc: "Celebration of Jewish deliverance as told by Megilat Esther" },
-  { title: "Pesach", start: "2028-04-10", end: "2028-04-18", cat: "major", hebrew: "פֶּסַח", desc: "Passover — the Feast of Unleavened Bread" },
-  { title: "Lag BaOmer", start: "2028-05-13", end: "2028-05-14", cat: "minor", hebrew: "ל\"ג בָּעוֹמֶר", desc: "33rd day of counting the Omer" },
-  { title: "Shavuot", start: "2028-05-30", end: "2028-06-01", cat: "major", hebrew: "שָׁבוּעוֹת", desc: "Festival of Weeks" },
-  { title: "Tisha B'Av", start: "2028-07-31", end: "2028-08-01", cat: "fast", hebrew: "תִּשְׁעָה בְּאָב", desc: "Fast commemorating the destruction of the Temples" },
-
-  // ── 5789 (2028-2029) ──
-  { title: "Rosh Hashana", start: "2028-09-20", end: "2028-09-22", cat: "major", hebrew: "רֹאשׁ הַשָּׁנָה", desc: "The Jewish New Year" },
-  { title: "Yom Kippur", start: "2028-09-29", end: "2028-09-30", cat: "major", hebrew: "יוֹם כִּפּוּר", desc: "Day of Atonement" },
-  { title: "Sukkot", start: "2028-10-04", end: "2028-10-11", cat: "major", hebrew: "סוּכּוֹת", desc: "Feast of Booths" },
-  { title: "Chanukah", start: "2028-12-12", end: "2028-12-20", cat: "major", hebrew: "חֲנוּכָּה", desc: "Festival of Lights" },
-  { title: "Tu BiShvat", start: "2029-01-31", end: "2029-02-01", cat: "minor", hebrew: "ט\"וּ בִּשְׁבָט", desc: "New Year for Trees" },
-  { title: "Purim", start: "2029-02-28", end: "2029-03-01", cat: "major", hebrew: "פּוּרִים", desc: "Celebration of Jewish deliverance as told by Megilat Esther" },
-  { title: "Pesach", start: "2029-03-30", end: "2029-04-07", cat: "major", hebrew: "פֶּסַח", desc: "Passover — the Feast of Unleavened Bread" },
-  { title: "Shavuot", start: "2029-05-19", end: "2029-05-21", cat: "major", hebrew: "שָׁבוּעוֹת", desc: "Festival of Weeks" },
-  { title: "Tisha B'Av", start: "2029-07-21", end: "2029-07-22", cat: "fast", hebrew: "תִּשְׁעָה בְּאָב", desc: "Fast commemorating the destruction of the Temples" },
-
-  // ── 5790 (2029-2030) ──
-  { title: "Rosh Hashana", start: "2029-09-09", end: "2029-09-11", cat: "major", hebrew: "רֹאשׁ הַשָּׁנָה", desc: "The Jewish New Year" },
-  { title: "Yom Kippur", start: "2029-09-18", end: "2029-09-19", cat: "major", hebrew: "יוֹם כִּפּוּר", desc: "Day of Atonement" },
-  { title: "Sukkot", start: "2029-09-23", end: "2029-09-30", cat: "major", hebrew: "סוּכּוֹת", desc: "Feast of Booths" },
-  { title: "Chanukah", start: "2029-12-01", end: "2029-12-09", cat: "major", hebrew: "חֲנוּכָּה", desc: "Festival of Lights" },
-  { title: "Tu BiShvat", start: "2030-01-21", end: "2030-01-22", cat: "minor", hebrew: "ט\"וּ בִּשְׁבָט", desc: "New Year for Trees" },
-  { title: "Purim", start: "2030-03-18", end: "2030-03-19", cat: "major", hebrew: "פּוּרִים", desc: "Celebration of Jewish deliverance as told by Megilat Esther" },
-  { title: "Pesach", start: "2030-04-17", end: "2030-04-25", cat: "major", hebrew: "פֶּסַח", desc: "Passover — the Feast of Unleavened Bread" },
-  { title: "Shavuot", start: "2030-06-06", end: "2030-06-08", cat: "major", hebrew: "שָׁבוּעוֹת", desc: "Festival of Weeks" },
+const JEWISH_HOLIDAY_DEFS: JewishHolidayDef[] = [
+  { title: "Rosh Hashana", hebcalBasename: "Rosh Hashana", cat: "major", hebrew: "רֹאשׁ הַשָּׁנָה", desc: "The Jewish New Year" },
+  { title: "Tzom Gedaliah", hebcalBasename: "Tzom Gedaliah", cat: "fast", hebrew: "צוֹם גְּדַלְיָה", desc: "Fast commemorating the assassination of Gedaliah ben Ahikam" },
+  { title: "Yom Kippur", hebcalBasename: "Yom Kippur", cat: "major", hebrew: "יוֹם כִּפּוּר", desc: "Day of Atonement" },
+  { title: "Sukkot", hebcalBasename: "Sukkot", cat: "major", hebrew: "סוּכּוֹת", desc: "Feast of Booths" },
+  {
+    title: "Shmini Atzeret",
+    hebcalBasename: "Shmini Atzeret",
+    cat: "major",
+    hebrew: "שְׁמִינִי עֲצֶרֶת",
+    desc: "Eighth Day of Assembly",
+    titleInIsrael: "Shmini Atzeret / Simchat Torah",
+    hebrewInIsrael: "שְׁמִינִי עֲצֶרֶת / שִׂמְחַת תּוֹרָה",
+  },
+  { title: "Simchat Torah", hebcalBasename: "Simchat Torah", cat: "major", hebrew: "שִׂמְחַת תּוֹרָה", desc: "Rejoicing with the Torah", includeInIsrael: false },
+  { title: "Chanukah", hebcalBasename: "Chanukah", cat: "major", hebrew: "חֲנוּכָּה", desc: "Festival of Lights" },
+  { title: "Asara B'Tevet", hebcalBasename: "Asara B'Tevet", cat: "fast", hebrew: "עֲשָׂרָה בְּטֵבֵת", desc: "Fast commemorating the siege of Jerusalem" },
+  { title: "Tu BiShvat", hebcalBasename: "Tu BiShvat", cat: "minor", hebrew: "ט\"וּ בִּשְׁבָט", desc: "New Year for Trees" },
+  { title: "Ta'anit Esther", hebcalBasename: "Ta'anit Esther", cat: "fast", hebrew: "תַּעֲנִית אֶסְתֵּר", desc: "Fast of Esther" },
+  { title: "Purim", hebcalBasename: "Purim", cat: "major", hebrew: "פּוּרִים", desc: "Celebration of Jewish deliverance as told by Megilat Esther" },
+  { title: "Shushan Purim", hebcalBasename: "Shushan Purim", cat: "minor", hebrew: "שׁוּשַׁן פּוּרִים", desc: "Purim as celebrated in walled cities" },
+  { title: "Pesach", hebcalBasename: "Pesach", cat: "major", hebrew: "פֶּסַח", desc: "Passover — the Feast of Unleavened Bread" },
+  { title: "Yom HaShoah", hebcalBasename: "Yom HaShoah", cat: "modern", hebrew: "יוֹם הַשּׁוֹאָה", desc: "Holocaust Remembrance Day" },
+  { title: "Yom HaZikaron", hebcalBasename: "Yom HaZikaron", cat: "modern", hebrew: "יוֹם הַזִּכָּרוֹן", desc: "Israeli Memorial Day" },
+  { title: "Yom HaAtzmaut", hebcalBasename: "Yom HaAtzma'ut", cat: "modern", hebrew: "יוֹם הָעַצְמָאוּת", desc: "Israel Independence Day" },
+  { title: "Pesach Sheni", hebcalBasename: "Pesach Sheni", cat: "minor", hebrew: "פֶּסַח שֵׁנִי", desc: "Second Passover" },
+  { title: "Lag BaOmer", hebcalBasename: "Lag BaOmer", cat: "minor", hebrew: "ל\"ג בָּעוֹמֶר", desc: "33rd day of counting the Omer" },
+  { title: "Yom Yerushalayim", hebcalBasename: "Yom Yerushalayim", cat: "modern", hebrew: "יוֹם יְרוּשָׁלַיִם", desc: "Jerusalem Day" },
+  { title: "Shavuot", hebcalBasename: "Shavuot", cat: "major", hebrew: "שָׁבוּעוֹת", desc: "Festival of Weeks" },
+  { title: "Tzom Tammuz", hebcalBasename: "Tzom Tammuz", cat: "fast", hebrew: "צוֹם תַּמּוּז", desc: "Fast of the 17th of Tammuz" },
+  { title: "Tisha B'Av", hebcalBasename: "Tish'a B'Av", cat: "fast", hebrew: "תִּשְׁעָה בְּאָב", desc: "Fast commemorating the destruction of the Temples" },
+  { title: "Tu B'Av", hebcalBasename: "Tu B'Av", cat: "minor", hebrew: "ט\"וּ בְּאָב", desc: "Minor holiday of love" },
 ];
-
-const ISRAEL_OVERRIDES: Record<string, { daysDelta?: number; mergeSimchat?: boolean; removeInIsrael?: boolean }> = {
-  "Pesach": { daysDelta: -1 },
-  "Shavuot": { daysDelta: -1 },
-  "Shmini Atzeret": { mergeSimchat: true },
-  "Simchat Torah": { removeInIsrael: true },
-};
-
 // ── Transliteration aliases ────────────────────────────────────────
 const ALIASES: Record<string, string[]> = {
-  "chanukah": ["hanukkah", "hanukah", "hanuka", "chanuka", "channukah"],
-  "sukkot": ["sukkos", "succot", "succos", "succoth"],
+  "chanukah": ["hanukkah", "hanukah", "hanuka", "chanuka", "channukah", "chanukkah"],
+  "sukkot": ["sukkos", "succot", "succos", "succoth", "sukkoth"],
   "rosh hashana": ["rosh hashanah", "rosh hashona", "rosh hashonah"],
   "shavuot": ["shavuos", "shavuoth", "shevuot"],
   "simchat torah": ["simchas torah", "simhat torah", "simchat tora"],
@@ -148,23 +128,25 @@ const ALIASES: Record<string, string[]> = {
   "yom kippur": ["yom kipur", "yom kippor"],
   "pesach": ["passover", "pessach", "pesah"],
   "purim": ["poorim"],
-  "tisha b'av": ["tisha bav", "tisha beav", "tishah bav", "ninth of av"],
+  "tisha b'av": ["tisha bav", "tisha beav", "tishah bav", "ninth of av", "9 av", "9th av", "9th of av"],
   "tu bishvat": ["tu b'shvat", "tu bshvat", "tu b'shevat", "tu beshvat"],
   "lag baomer": ["lag b'omer", "lag bomer"],
   "yom haatzmaut": ["yom ha'atzmaut", "israel independence"],
   "yom hazikaron": ["yom ha'zikaron", "israeli memorial"],
   "yom hashoah": ["yom ha'shoah", "holocaust remembrance"],
   "ta'anit esther": ["taanis esther", "fast of esther", "taanit esther"],
-  "asara b'tevet": ["asara btevet", "10 tevet", "tenth of tevet"],
+  "asara b'tevet": ["asara btevet", "asarah b'tevet", "asarah btevet", "10 tevet", "10th tevet", "10th of tevet", "tenth of tevet"],
   "tzom gedaliah": ["tzom gedalia", "fast of gedaliah"],
-  "tzom tammuz": ["17 tammuz", "seventeenth of tammuz", "fast of tammuz"],
+  "tzom tammuz": ["tzom tamuz", "17 tammuz", "17th tammuz", "17th of tammuz", "seventeenth of tammuz", "fast of tammuz"],
   "shushan purim": ["shushan poorim"],
   "pesach sheni": ["second passover"],
-  "tu b'av": ["tu bav", "15 av"],
+  "tu b'av": ["tu bav", "15 av", "15th av", "15th of av"],
   "yom yerushalayim": ["jerusalem day"],
   "martin luther king": ["mlk day", "mlk"],
-  "presidents' day": ["presidents day", "washington's birthday"],
+  "presidents' day": ["presidents day", "president's day", "washington's birthday", "washingtons birthday"],
   "independence day": ["4th of july", "fourth of july", "july 4th", "july 4"],
+  "labor day": ["labour day"],
+  "veterans day": ["veteran's day", "veterans' day"],
   "thanksgiving": ["turkey day"],
 };
 
@@ -196,12 +178,25 @@ export class HolidayDataService {
     return new Date(y, m - 1, d);
   }
 
-  static fmtD(dt: Date): string { return dt.toISOString().split('T')[0]; }
+  static fmtD(dt: Date): string {
+    const y = dt.getFullYear();
+    const m = String(dt.getMonth() + 1).padStart(2, '0');
+    const d = String(dt.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+
+  private static addDays(s: string, delta: number): string {
+    const d = this.parseDate(s);
+    d.setDate(d.getDate() + delta);
+    return this.fmtD(d);
+  }
+
+  private static diffDays(a: string, b: string): number {
+    return Math.round((this.parseDate(b).getTime() - this.parseDate(a).getTime()) / 86400000);
+  }
 
   static addDay(s: string): string {
-    const d = this.parseDate(s);
-    d.setDate(d.getDate() + 1);
-    return this.fmtD(d);
+    return this.addDays(s, 1);
   }
 
   static formatDate(s: string): string {
@@ -239,6 +234,95 @@ export class HolidayDataService {
 
   static isJewish(cat: HolidayCat): boolean {
     return cat !== 'us-federal';
+  }
+
+  private buildJewishHolidays(diaspora: boolean, startYear: number, numYears: number): RawHoliday[] {
+    const basenames = new Set(JEWISH_HOLIDAY_DEFS.map(d => d.hebcalBasename));
+    const byBasename = new Map<string, Map<string, boolean>>();
+
+    const events = HebrewCalendar.calendar({
+      year: startYear,
+      isHebrewYear: false,
+      numYears,
+      il: !diaspora,
+      noRoshChodesh: true,
+      noSpecialShabbat: true,
+    });
+
+    for (const ev of events) {
+      const base = ev.basename();
+      if (!basenames.has(base)) continue;
+
+      const date = HolidayDataService.fmtD(ev.greg());
+      const isErev = (ev.getFlags() & HebcalFlags.EREV) !== 0;
+
+      let dateMap = byBasename.get(base);
+      if (!dateMap) {
+        dateMap = new Map();
+        byBasename.set(base, dateMap);
+      }
+      dateMap.set(date, (dateMap.get(date) ?? false) || isErev);
+    }
+
+    const il = !diaspora;
+    const raw: RawHoliday[] = [];
+
+    for (const def of JEWISH_HOLIDAY_DEFS) {
+      if (il && def.includeInIsrael === false) continue;
+
+      const dateMap = byBasename.get(def.hebcalBasename);
+      if (!dateMap) continue;
+
+      const days = [...dateMap.entries()]
+        .map(([date, isErev]) => ({ date, isErev }))
+        .sort((a, b) => a.date.localeCompare(b.date));
+
+      if (days.length === 0) continue;
+
+      const segments: Array<Array<{ date: string; isErev: boolean }>> = [];
+      let seg: Array<{ date: string; isErev: boolean }> = [];
+      for (const day of days) {
+        if (seg.length === 0) {
+          seg = [day];
+          continue;
+        }
+        const prev = seg[seg.length - 1].date;
+        const delta = HolidayDataService.diffDays(prev, day.date);
+        if (delta <= 1) {
+          seg.push(day);
+        } else {
+          segments.push(seg);
+          seg = [day];
+        }
+      }
+      if (seg.length) segments.push(seg);
+
+      for (const s of segments) {
+        const earliest = s[0].date;
+        const latest = s[s.length - 1].date;
+
+        const shift = HolidayDataService.jewishSunsetShift(def.cat);
+        const erev = s
+          .filter(d => d.isErev)
+          .map(d => d.date)
+          .sort((a, b) => a.localeCompare(b))[0];
+
+        let start = earliest;
+        if (erev) start = erev;
+        else if (shift) start = HolidayDataService.addDays(earliest, -1);
+
+        raw.push({
+          title: il ? (def.titleInIsrael || def.title) : def.title,
+          start,
+          end: latest,
+          cat: def.cat,
+          hebrew: il ? (def.hebrewInIsrael || def.hebrew) : def.hebrew,
+          desc: def.desc,
+        });
+      }
+    }
+
+    return raw;
   }
 
   // ── US Federal Holidays ──────────────────────────────────────────
@@ -283,20 +367,33 @@ export class HolidayDataService {
   // ── Search ───────────────────────────────────────────────────────
 
   static buildSearchTerms(query: string): string[] {
-    const q = query.toLowerCase().trim();
+    const q = normalizeForSearch(query);
+    if (!q) return [];
+
+    const qc = compactForSearch(q);
     const terms = new Set<string>([q]);
-    for (const [key, variants] of Object.entries(ALIASES)) {
-      if (key.includes(q) || q.includes(key)) {
-        terms.add(key);
-        variants.forEach(v => terms.add(v));
-      }
-      for (const v of variants) {
-        if (v.includes(q) || q.includes(v)) {
-          terms.add(key);
-          variants.forEach(v2 => terms.add(v2));
+
+    for (const [keyRaw, variantsRaw] of Object.entries(ALIASES)) {
+      const key = normalizeForSearch(keyRaw);
+      const variants = variantsRaw.map(v => normalizeForSearch(v)).filter(Boolean);
+
+      const group = [key, ...variants].filter(Boolean);
+      const groupCompacts = group.map(compactForSearch);
+
+      let related = false;
+      for (let i = 0; i < group.length; i++) {
+        const t = group[i];
+        const tc = groupCompacts[i];
+        if (t.includes(q) || q.includes(t) || tc.includes(qc) || qc.includes(tc)) {
+          related = true;
+          break;
         }
       }
+      if (!related) continue;
+
+      group.forEach(t => terms.add(t));
     }
+
     return [...terms];
   }
 
@@ -304,26 +401,13 @@ export class HolidayDataService {
 
   buildHolidays(diaspora: boolean): Holiday[] {
     const today = HolidayDataService.todayStr();
-    let jewish: RawHoliday[] = JEWISH_HOLIDAYS_DIASPORA.map(h => ({ ...h }));
-
-    if (!diaspora) {
-      jewish = jewish.filter(h => !ISRAEL_OVERRIDES[h.title]?.removeInIsrael);
-      jewish = jewish.map(h => {
-        const ovr = ISRAEL_OVERRIDES[h.title];
-        if (!ovr) return h;
-        const copy = { ...h };
-        if (ovr.daysDelta) {
-          const endDt = HolidayDataService.parseDate(copy.end);
-          endDt.setDate(endDt.getDate() + ovr.daysDelta);
-          copy.end = HolidayDataService.fmtD(endDt);
-        }
-        if (ovr.mergeSimchat) copy.title = 'Shmini Atzeret / Simchat Torah';
-        return copy;
-      });
-    }
+    const currentYear = new Date().getFullYear();
+    const startYear = currentYear - 1; // capture holidays spanning Gregorian years (e.g., Chanukah)
+    const numYears = 8; // (currentYear-1)..(currentYear+6) to fully cover holidays spanning years
+    const jewish: RawHoliday[] = this.buildJewishHolidays(diaspora, startYear, numYears);
 
     const us: RawHoliday[] = [];
-    for (let y = 2025; y <= 2030; y++) us.push(...HolidayDataService.getUSHolidays(y));
+    for (let y = startYear; y < startYear + numYears; y++) us.push(...HolidayDataService.getUSHolidays(y));
     const all = [...jewish, ...us];
 
     const grouped: Record<string, { raw: RawHoliday; occurrences: Occurrence[] }> = {};
@@ -367,11 +451,39 @@ export class HolidayDataService {
   // ── Search filter ────────────────────────────────────────────────
 
   filterHolidays(holidays: Holiday[], query: string): Holiday[] {
-    if (!query.trim()) return [];
+    if (!normalizeForSearch(query)) return [];
     const terms = HolidayDataService.buildSearchTerms(query);
     return holidays.filter(h => {
-      const t = h.title.toLowerCase();
-      return terms.some(term => t.includes(term) || term.includes(t.split(' ')[0].toLowerCase()));
+      const title = normalizeForSearch(h.title);
+      const titleC = compactForSearch(title);
+
+      const heb = normalizeForSearch(h.hebrew || '');
+      const hebC = compactForSearch(heb);
+      const hebSkel = hebrewSkeleton(heb);
+
+      return terms.some(term => {
+        if (!term) return false;
+
+        const termC = compactForSearch(term);
+        const termSkel = hebrewSkeleton(term);
+
+        // English/transliterated title
+        if (title.includes(term) || term.includes(title)) return true;
+        if (titleC.includes(termC) || termC.includes(titleC)) return true;
+
+        // Hebrew name
+        if (heb) {
+          if (heb.includes(term) || term.includes(heb)) return true;
+          if (hebC.includes(termC) || termC.includes(hebC)) return true;
+
+          // Common Hebrew spelling differences: ignore optional ו/י (matres lectionis).
+          if (HEBREW_RE.test(termSkel) && termSkel.length >= 3) {
+            if (hebSkel.includes(termSkel) || termSkel.includes(hebSkel)) return true;
+          }
+        }
+
+        return false;
+      });
     }).sort((a, b) => {
       const wa = HolidayDataService.CAT_WEIGHT[a.cat] ?? 5;
       const wb = HolidayDataService.CAT_WEIGHT[b.cat] ?? 5;
@@ -382,6 +494,62 @@ export class HolidayDataService {
 
   // ── Calendar URL ─────────────────────────────────────────────────
 
+  private static icsEscapeText(input: string): string {
+    return input
+      .replace(/\\/g, '\\\\')
+      .replace(/\r/g, '')
+      .replace(/\n/g, '\\n')
+      .replace(/;/g, '\\;')
+      .replace(/,/g, '\\,');
+  }
+
+  private static icsSafeId(input: string): string {
+    const s = input
+      .toLowerCase()
+      .replace(/['"]/g, '')
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 40);
+    return s || 'event';
+  }
+
+  private static icsDtstamp(): string {
+    // Example: 20260209T173045Z
+    return new Date()
+      .toISOString()
+      .replace(/[-:]/g, '')
+      .replace(/\.\d{3}Z$/, 'Z');
+  }
+
+  static icsContent(title: string, start: string, end: string): string {
+    const dtStart = start.replace(/-/g, '');
+
+    const endDt = new Date(this.parseDate(end));
+    endDt.setDate(endDt.getDate() + 1); // DTEND is exclusive for all-day events.
+    const dtEnd = this.fmtD(endDt).replace(/-/g, '');
+
+    const uid = `${dtStart}-${dtEnd}-${this.icsSafeId(title)}@whenischag.nosson.ai`;
+
+    const lines = [
+      'BEGIN:VCALENDAR',
+      'VERSION:2.0',
+      'PRODID:-//whenischag.nosson.ai//holiday-lookup//EN',
+      'CALSCALE:GREGORIAN',
+      'METHOD:PUBLISH',
+      'BEGIN:VEVENT',
+      `UID:${uid}`,
+      `DTSTAMP:${this.icsDtstamp()}`,
+      `SUMMARY:${this.icsEscapeText(title)}`,
+      `DTSTART;VALUE=DATE:${dtStart}`,
+      `DTEND;VALUE=DATE:${dtEnd}`,
+      'END:VEVENT',
+      'END:VCALENDAR',
+      '',
+    ];
+
+    return lines.join('\r\n');
+  }
+
   static gcalUrl(title: string, start: string, end: string): string {
     const gcalStart = start.replace(/-/g, '');
     const endDt = new Date(this.parseDate(end));
@@ -390,3 +558,4 @@ export class HolidayDataService {
     return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(title)}&dates=${gcalStart}/${gcalEnd}`;
   }
 }
+

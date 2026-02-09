@@ -2,13 +2,14 @@ import { Component, OnInit, ViewChild, ElementRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HolidayDataService, Holiday, Occurrence, HolidayCat } from './holiday-data.service';
+import { WeekStripComponent } from './week-strip.component';
 
 type View = 'search' | 'detail' | 'settings' | 'about';
 
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, WeekStripComponent],
   templateUrl: './app.component.html',
   styleUrl: './app.component.css',
 })
@@ -72,7 +73,6 @@ export class AppComponent implements OnInit {
   jewishSunsetShift(cat: HolidayCat) { return HolidayDataService.jewishSunsetShift(cat); }
   isJewish(cat: HolidayCat) { return HolidayDataService.isJewish(cat); }
   getCatStyle(cat: string) { return HolidayDataService.CAT_STYLES[cat] || HolidayDataService.CAT_STYLES['minor']; }
-  gcalUrl(title: string, start: string, end: string) { return HolidayDataService.gcalUrl(title, start, end); }
 
   occDisplayDays(occ: Occurrence) { return this.daySpan(occ.displayStart, occ.displayEnd); }
   occDaysUntil(occ: Occurrence) { return this.daysUntil(occ.displayStart); }
@@ -104,6 +104,35 @@ export class AppComponent implements OnInit {
     navigator.clipboard?.writeText(text);
     this.copiedId = id;
     setTimeout(() => this.copiedId = null, 1500);
+  }
+
+  downloadIcs(title: string, start: string, end: string) {
+    const ics = HolidayDataService.icsContent(title, start, end);
+    const blob = new Blob([ics], { type: 'text/calendar;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = this.icsFilename(title, start, end);
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+
+    // Cleanup after the download has been triggered.
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+  }
+
+  private icsFilename(title: string, start: string, end: string): string {
+    const datePart = start === end ? start : `${start}_to_${end}`;
+    const base = `${title}-${datePart}`;
+    const safe = base
+      .toLowerCase()
+      .replace(/['"]/g, '')
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 80);
+    return `${safe || 'calendar-event'}.ics`;
   }
 
   getCopyText(occ: Occurrence, title: string): string {
