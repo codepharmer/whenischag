@@ -50,7 +50,7 @@
               <span class="cat-badge-sm" [style.background]="getCatStyle(h.cat).bg" [style.color]="getCatStyle(h.cat).color">
                 {{ getCatStyle(h.cat).label }}
               </span>
-              <span class="meta-text" *ngIf="jewishSunsetShift(h.cat)">Starts evening before at sunset</span>
+              <span class="meta-text" *ngIf="jewishSunsetShift(h.cat)">Starts {{ formatDateShort(h.nextStart) }} at sunset</span>
               <span class="meta-text" *ngIf="h.cat === 'fast'">Dawn to nightfall</span>
               <span class="meta-text" *ngIf="h.dayCount > 1">· {{ h.dayCount }} days</span>
             </div>
@@ -142,7 +142,7 @@
           <div class="occ-through" *ngIf="occDisplayDays(occ) > 1">
             through {{ formatDate(occ.displayEnd) }} · {{ occDisplayDays(occ) }} days
           </div>
-          <div class="occ-note" *ngIf="jewishSunsetShift(selected.cat)">Starts the evening before at sunset</div>
+          <div class="occ-note" *ngIf="jewishSunsetShift(selected.cat)">Starts {{ formatDateShort(occ.start) }} at sunset</div>
           <div class="occ-note" *ngIf="selected.cat === 'fast'">Fast begins at dawn</div>
         </div>
         <div class="occ-right">
