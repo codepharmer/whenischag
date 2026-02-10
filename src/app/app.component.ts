@@ -1,4 +1,4 @@
-import { Component, OnInit, ViewChild, ElementRef } from '@angular/core';
+import { AfterViewInit, Component, ElementRef, OnInit, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HolidayDataService, Holiday, Occurrence, HolidayCat } from './holiday-data.service';
@@ -13,7 +13,7 @@ type View = 'search' | 'detail' | 'settings' | 'about';
   templateUrl: './app.component.html',
   styleUrl: './app.component.css',
 })
-export class AppComponent implements OnInit {
+export class AppComponent implements OnInit, AfterViewInit {
   @ViewChild('searchInput') searchInput!: ElementRef<HTMLInputElement>;
 
   svc = HolidayDataService;
@@ -32,6 +32,12 @@ export class AppComponent implements OnInit {
     this.rebuildHolidays();
   }
 
+  ngAfterViewInit() {
+    // Best-effort: some mobile browsers will open the soft keyboard when an input is focused on load,
+    // but iOS Safari generally requires a user gesture. This at least puts the cursor in the field.
+    this.focusInput();
+  }
+
   rebuildHolidays() {
     this.holidays = this.holidayData.buildHolidays(this.diaspora);
     this.upcoming = this.holidays.filter(h => h.daysUntil >= 0).slice(0, 5);
@@ -43,7 +49,21 @@ export class AppComponent implements OnInit {
   }
 
   focusInput() {
-    setTimeout(() => this.searchInput?.nativeElement?.focus(), 80);
+    const attempt = () => {
+      const el = this.searchInput?.nativeElement;
+      if (!el || this.view !== 'search' || !el.isConnected) return;
+
+      // `preventScroll` isn't supported everywhere; fall back to plain focus.
+      try {
+        el.focus({ preventScroll: true });
+      } catch {
+        el.focus();
+      }
+    };
+
+    // Try immediately (helps on initial load), then again after the view settles.
+    attempt();
+    setTimeout(attempt, 80);
   }
 
   goSearch() {
