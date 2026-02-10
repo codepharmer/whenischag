@@ -75,7 +75,7 @@ export interface CatStyle {
 // ════════════════════════════════════════════════════════════════════
 interface JewishHolidayDef {
   title: string;
-  hebcalBasename: string;
+  hebcalBasename: string | string[];
   cat: Exclude<HolidayCat, 'us-federal'>;
   hebrew: string;
   desc: string;
@@ -84,21 +84,23 @@ interface JewishHolidayDef {
   hebrewInIsrael?: string;
 }
 
+function defBasenames(def: JewishHolidayDef): string[] {
+  return Array.isArray(def.hebcalBasename) ? def.hebcalBasename : [def.hebcalBasename];
+}
+
 const JEWISH_HOLIDAY_DEFS: JewishHolidayDef[] = [
   { title: "Rosh Hashana", hebcalBasename: "Rosh Hashana", cat: "major", hebrew: "רֹאשׁ הַשָּׁנָה", desc: "The Jewish New Year" },
   { title: "Tzom Gedaliah", hebcalBasename: "Tzom Gedaliah", cat: "fast", hebrew: "צוֹם גְּדַלְיָה", desc: "Fast commemorating the assassination of Gedaliah ben Ahikam" },
   { title: "Yom Kippur", hebcalBasename: "Yom Kippur", cat: "major", hebrew: "יוֹם כִּפּוּר", desc: "Day of Atonement" },
-  { title: "Sukkot", hebcalBasename: "Sukkot", cat: "major", hebrew: "סוּכּוֹת", desc: "Feast of Booths" },
   {
-    title: "Shmini Atzeret",
-    hebcalBasename: "Shmini Atzeret",
+    title: "Sukkot",
+    // Treat Sukkot, Shmini Atzeret, and Simchat Torah as a single holiday span.
+    // This keeps one entry in the UI and makes searches for any of these names land on the same result.
+    hebcalBasename: ["Sukkot", "Shmini Atzeret", "Simchat Torah"],
     cat: "major",
-    hebrew: "שְׁמִינִי עֲצֶרֶת",
-    desc: "Eighth Day of Assembly",
-    titleInIsrael: "Shmini Atzeret / Simchat Torah",
-    hebrewInIsrael: "שְׁמִינִי עֲצֶרֶת / שִׂמְחַת תּוֹרָה",
+    hebrew: "סוּכּוֹת / שְׁמִינִי עֲצֶרֶת / שִׂמְחַת תּוֹרָה",
+    desc: "Sukkot (includes Shmini Atzeret and Simchat Torah)",
   },
-  { title: "Simchat Torah", hebcalBasename: "Simchat Torah", cat: "major", hebrew: "שִׂמְחַת תּוֹרָה", desc: "Rejoicing with the Torah", includeInIsrael: false },
   { title: "Chanukah", hebcalBasename: "Chanukah", cat: "major", hebrew: "חֲנוּכָּה", desc: "Festival of Lights" },
   { title: "Asara B'Tevet", hebcalBasename: "Asara B'Tevet", cat: "fast", hebrew: "עֲשָׂרָה בְּטֵבֵת", desc: "Fast commemorating the siege of Jerusalem" },
   { title: "Tu BiShvat", hebcalBasename: "Tu BiShvat", cat: "minor", hebrew: "ט\"וּ בִּשְׁבָט", desc: "New Year for Trees" },
@@ -120,11 +122,23 @@ const JEWISH_HOLIDAY_DEFS: JewishHolidayDef[] = [
 // ── Transliteration aliases ────────────────────────────────────────
 const ALIASES: Record<string, string[]> = {
   "chanukah": ["hanukkah", "hanukah", "hanuka", "chanuka", "channukah", "chanukkah"],
-  "sukkot": ["sukkos", "succot", "succos", "succoth", "sukkoth"],
+  "sukkot": [
+    "sukkos",
+    "succot",
+    "succos",
+    "succoth",
+    "sukkoth",
+    "shmini atzeret",
+    "shmini atzeres",
+    "shemini atzeret",
+    "shemini atzeres",
+    "simchat torah",
+    "simchas torah",
+    "simhat torah",
+    "simchat tora",
+  ],
   "rosh hashana": ["rosh hashanah", "rosh hashona", "rosh hashonah"],
   "shavuot": ["shavuos", "shavuoth", "shevuot"],
-  "simchat torah": ["simchas torah", "simhat torah", "simchat tora"],
-  "shmini atzeret": ["shemini atzeret", "shmini atzeres", "shemini atzeres"],
   "yom kippur": ["yom kipur", "yom kippor"],
   "pesach": ["passover", "pessach", "pesah"],
   "purim": ["poorim"],
@@ -137,7 +151,32 @@ const ALIASES: Record<string, string[]> = {
   "ta'anit esther": ["taanis esther", "fast of esther", "taanit esther"],
   "asara b'tevet": ["asara btevet", "asarah b'tevet", "asarah btevet", "10 tevet", "10th tevet", "10th of tevet", "tenth of tevet"],
   "tzom gedaliah": ["tzom gedalia", "fast of gedaliah"],
-  "tzom tammuz": ["tzom tamuz", "17 tammuz", "17th tammuz", "17th of tammuz", "seventeenth of tammuz", "fast of tammuz"],
+  "tzom tammuz": [
+    "tzom tamuz",
+    "17 tammuz",
+    "17 tamuz",
+    "17th tammuz",
+    "17th tamuz",
+    "17th of tammuz",
+    "17th of tamuz",
+    "seventeenth of tammuz",
+    "fast of tammuz",
+    "fast of tamuz",
+    "shiva asar btammuz",
+    "shiva asar btamuz",
+    "shivah asar btammuz",
+    "shivah asar btamuz",
+    "sheva asar btammuz",
+    "sheva asar btamuz",
+    "shiva asar b'tammuz",
+    "shiva asar b'tamuz",
+    "shiva asar b tammuz",
+    "shiva asar b tamuz",
+    "shivah asar b tammuz",
+    "shivah asar b tamuz",
+    "sheva asar b tammuz",
+    "sheva asar b tamuz",
+  ],
   "shushan purim": ["shushan poorim"],
   "pesach sheni": ["second passover"],
   "tu b'av": ["tu bav", "15 av", "15th av", "15th of av"],
@@ -237,7 +276,7 @@ export class HolidayDataService {
   }
 
   private buildJewishHolidays(diaspora: boolean, startYear: number, numYears: number): RawHoliday[] {
-    const basenames = new Set(JEWISH_HOLIDAY_DEFS.map(d => d.hebcalBasename));
+    const basenames = new Set(JEWISH_HOLIDAY_DEFS.flatMap(d => defBasenames(d)));
     const byBasename = new Map<string, Map<string, boolean>>();
 
     const events = HebrewCalendar.calendar({
@@ -270,8 +309,16 @@ export class HolidayDataService {
     for (const def of JEWISH_HOLIDAY_DEFS) {
       if (il && def.includeInIsrael === false) continue;
 
-      const dateMap = byBasename.get(def.hebcalBasename);
-      if (!dateMap) continue;
+      // Some holidays intentionally unify multiple Hebcal basenames (e.g., Sukkot+Shmini Atzeret+Simchat Torah).
+      const dateMap = new Map<string, boolean>();
+      for (const base of defBasenames(def)) {
+        const dm = byBasename.get(base);
+        if (!dm) continue;
+        for (const [date, isErev] of dm.entries()) {
+          dateMap.set(date, (dateMap.get(date) ?? false) || isErev);
+        }
+      }
+      if (dateMap.size === 0) continue;
 
       const days = [...dateMap.entries()]
         .map(([date, isErev]) => ({ date, isErev }))
